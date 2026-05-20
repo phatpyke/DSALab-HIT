@@ -391,5 +391,140 @@ Viết chương trình **BenchmarkTool** hiển thị bảng so sánh tốc đ�
 
 **Yêu cầu:** dùng `std::chrono`, hiển thị bảng căn chỉnh đẹp, xuất ra file `benchmark.txt`.
 
+Mã nguồn C++ (main.cpp)C++#include <iostream>
+#include <vector>
+#include <chrono>
+#include <iomanip>
+#include <fstream>
+#include <string>
+#include <sstream>
+
+using namespace std;
+using namespace std::chrono;
+
+// 1. O(1) - Thời gian hằng số
+void testO1(int n) {
+    // Dùng volatile để ép compiler thực thi, không tự động tối ưu hóa (optimize) bỏ đi
+    volatile int x = n; 
+}
+
+// 2. O(log n) - Thời gian logarit
+void testOLogN(int n) {
+    volatile int x = 0;
+    for (int i = 1; i < n; i *= 2) {
+        x++;
+    }
+}
+
+// 3. O(n) - Thời gian tuyến tính
+void testON(int n) {
+    volatile int x = 0;
+    for (int i = 0; i < n; i++) {
+        x++;
+    }
+}
+
+// 4. O(n^2) - Thời gian đa thức
+void testON2(int n) {
+    volatile int x = 0;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            x++;
+        }
+    }
+}
+
+// Hàm template để đo thời gian chạy của bất kỳ function nào
+template<typename Func>
+double measureTime(Func f, int n) {
+    auto start = high_resolution_clock::now();
+    f(n);
+    auto end = high_resolution_clock::now();
+    
+    // Ép kiểu thời gian ra milliseconds bằng double
+    duration<double, std::milli> ms = end - start;
+    return ms.count();
+}
+
+// Căn lề chuỗi (Helper) để bảng ASCII không bị xô lệch
+string padRight(string s, int width) {
+    if (s.length() < width) {
+        s.append(width - s.length(), ' ');
+    }
+    return s;
+}
+
+// Format số milliseconds cho đẹp mắt
+string formatTime(double ms) {
+    stringstream ss;
+    if (ms >= 10000) ss << fixed << setprecision(0) << ms << "ms";
+    else if (ms >= 100) ss << fixed << setprecision(1) << ms << "ms";
+    else ss << fixed << setprecision(3) << ms << "ms";
+    return ss.str();
+}
+
+// In một dòng của bảng
+void printRow(ostream& os, const string& name, double t1, double t2, double t3) {
+    string col1 = padRight("    " + name, 14);
+    string col2 = padRight("  " + formatTime(t1), 10);
+    string col3 = padRight("  " + formatTime(t2), 10);
+    string col4 = padRight("  " + formatTime(t3), 10);
+    os << "║" << col1 << "║" << col2 << "║" << col3 << "║" << col4 << "║\n";
+}
+
+// Chạy benchmark và xuất kết quả ra luồng ostream được chỉ định (Console hoặc File)
+void runBenchmark(ostream& os) {
+    vector<int> sizes = {1000, 10000, 100000};
+    
+    os << "╔══════════════╦══════════╦══════════╦══════════╗\n";
+    os << "║   Thuật toán ║  n=1000  ║  n=10000 ║ n=100000 ║\n";
+    os << "╠══════════════╬══════════╬══════════╬══════════╣\n";
+    
+    // Benchmark O(1)
+    printRow(os, "O(1)", 
+             measureTime(testO1, sizes[0]), 
+             measureTime(testO1, sizes[1]), 
+             measureTime(testO1, sizes[2]));
+             
+    // Benchmark O(log n)
+    printRow(os, "O(log n)", 
+             measureTime(testOLogN, sizes[0]), 
+             measureTime(testOLogN, sizes[1]), 
+             measureTime(testOLogN, sizes[2]));
+             
+    // Benchmark O(n)
+    printRow(os, "O(n)", 
+             measureTime(testON, sizes[0]), 
+             measureTime(testON, sizes[1]), 
+             measureTime(testON, sizes[2]));
+             
+    // Benchmark O(n^2) - Cảnh báo: n=100,000 sẽ chạy khoảng 10 tỷ vòng lặp!
+    printRow(os, "O(n^2)", 
+             measureTime(testON2, sizes[0]), 
+             measureTime(testON2, sizes[1]), 
+             measureTime(testON2, sizes[2]));
+             
+    os << "╚══════════════╩══════════╩══════════╩══════════╝\n";
+}
+
+int main() {
+    cout << "Đang chạy benchmark, vui lòng đợi (O(n^2) với n=100,000 có thể mất vài giây)..." << endl;
+
+    // 1. In ra Console
+    runBenchmark(cout);
+    
+    // 2. Xuất ra file benchmark.txt
+    ofstream outFile("benchmark.txt");
+    if (outFile.is_open()) {
+        runBenchmark(outFile);
+        cout << "\n✅ Đã lưu kết quả thành công vào file 'benchmark.txt'" << endl;
+        outFile.close();
+    } else {
+        cerr << "❌ Không thể tạo file benchmark.txt" << endl;
+    }
+    
+    return 0;
+}
+Các Điểm Kỹ Thuật Quan Trọng Trong Code:Từ khóa volatile: Nếu bạn viết một vòng lặp không làm thay đổi trạng thái của chương trình (như vòng lặp for đếm số bình thường), các trình biên dịch (như GCC, Clang) sẽ xem đó là code thừa và tự động xóa nó đi khi biên dịch, khiến thời gian chạy bằng $0ms$. Khai báo biến volatile int x ép CPU phải thực thi các phép tính, giúp ta đo được thời gian thực tế.std::chrono::high_resolution_clock: Là đồng hồ có độ chia nhỏ nhất trong C++, phù hợp để đo thời gian các thuật toán siêu nhanh như $O(1)$ hay $O(\log n)$ (thường tốn dưới $0.001ms$).Luồng I/O chung (ostream&): Thay vì viết code in bảng 2 lần (một lần cho cout, một lần cho ofstream), hàm runBenchmark nhận tham chiếu đến đối tượng luồng chung (ostream&), giúp code tái sử dụng gọn gàng tuyệt đối.Lưu ý khi chạy: Với phép đo O(n^2) tại $n = 100,000$, chương trình sẽ phải chạy $10^{10}$ (10 tỷ) vòng lặp. Tùy vào sức mạnh CPU của bạn, bước này có thể làm chương trình "đứng hình" khoảng 5 đến 20 giây. Hãy kiên nhẫn chờ quá trình đo đạc hoàn tất!
 ---
 📁 Tham khảo: `Chuong1_TongQuan/Chuong1_TongQuan.cpp`
